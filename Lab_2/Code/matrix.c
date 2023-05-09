@@ -116,26 +116,32 @@ void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c)
 {
     // Make sure matrix dimensions match.
     if (a->cols != b->rows || c->rows != a->rows || c->cols != b->cols) {
-        fprintf(stderr, "matrixAdd: input size mismatch\n");
+        fprintf(stderr, "matrixMultSIMD: input size mismatch\n");
         exit(-1);
     }
 
     for (int i = 0; i < a->rows; i++) {
         for (int j = 0; j < b->cols; j++) {
-            vfa sum = {0, 0, 0, 0};
+            float result = 0;
             for (int k = 0; k < a->cols; k += SIMD_FLOATS) {
                 vfa a_vector = *(vfa *)__builtin_assume_aligned(&a->data[i * a->cols + k], SIMD_BYTES);
-                vfa b_vector = *(vfa *)__builtin_assume_aligned(&b->data[k * b->cols + j], SIMD_BYTES);
-                sum += a_vector * b_vector;
-            }
-            float result = 0;
-            for (int l = 0; l < SIMD_FLOATS; l++) {
-                result += sum[l];
+                vfa sum = {0, 0, 0, 0, 0, 0, 0, 0};
+                for (int l = 0; l < SIMD_FLOATS; l++) {
+                    if (k + l < a->cols) {
+                        sum[l] = a_vector[l] * b->data[(k + l) * b->cols + j];
+                    }
+                }
+                for (int l = 0; l < SIMD_FLOATS; l++) {
+                    result += sum[l];
+                }
             }
             c->data[i * c->cols + j] = result;
         }
     }
 }
+
+
+
 
 
 double timespec_diff(struct timespec ts1, struct timespec ts2) {
@@ -185,6 +191,7 @@ int main(int argc, char *argv[])
     int n = 64;
 
     for (int n = 3; n <= 64; n++) {
+        printf("Benchmarking for n = %d\n", n);
         matrixAlloc(&e, n, n);
         matrixRandom(&e);
 
