@@ -112,6 +112,8 @@ void matrixMultSeq(Matrix *a, Matrix *b, Matrix *c)
     }
 }
 
+
+
 void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c) {
     // Check if matrix dimensions match.
     if (a->cols != b->rows || c->rows != a->rows || c->cols != b->cols) {
@@ -121,24 +123,23 @@ void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c) {
 
     // Iterate over rows of matrix a.
     for (int i = 0; i < a->rows; i++) {
-        // Iterate over columns of matrix b.
-        for (int j = 0; j < b->cols; j++) {
+        // Iterate over rows of matrix b.
+        for (int j = 0; j < b->rows; j++) {
             // Initialize sum variable as a vector of zeros.
             vfa sum = {0, 0, 0, 0, 0, 0, 0, 0};
 
-            // Iterate over columns of matrix a (and rows of matrix b) with SIMD_FLOATS step.
+            // Iterate over columns of matrix a and rows of matrix b.
             for (int k = 0; k < a->cols; k += SIMD_FLOATS) {
-                // Iterate over elements of a_vector.
-                for (int l = 0; l < SIMD_FLOATS; l++) {
-                    // Ensure that we are within the valid range of matrix a.
-                    if (k + l < a->cols) {
-                        // Load a single value from matrix a.
-                        float a_val = a->data[i * a->cols + k + l];
-                        // Load a single value from matrix b.
-                        float b_val = b->data[(k + l) * b->cols + j];
-                        // Multiply the values and accumulate the result in the corresponding element of the sum vector.
-                        sum[l] += a_val * b_val;
-                    }
+                // Get the value for a before the loop.
+                vfa a_values;
+                memcpy(&a_values, &a->data[i * a->cols + k], sizeof(vfa));
+
+                // Iterate over SIMD_FLOATS elements in a_values and rows of matrix b.
+                for (int l = 0; l < SIMD_FLOATS && k + l < a->cols; l++) {
+                    float a_value = a_values[l];
+                    vfa b_vector;
+                    memcpy(&b_vector, &b->data[(k + l) * b->cols + j], sizeof(vfa));
+                    sum[l] += a_value * b_vector[l];
                 }
             }
 
@@ -158,6 +159,7 @@ void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c) {
 
 
 
+
 double timespec_diff(struct timespec ts1, struct timespec ts2) {
     return (double)(ts2.tv_sec - ts1.tv_sec) + (double)((ts2.tv_nsec - ts1.tv_nsec)/1e9f);
 }
@@ -165,7 +167,7 @@ double timespec_diff(struct timespec ts1, struct timespec ts2) {
 int main(int argc, char *argv[])
 {
     srand48(time(NULL));
-    int n = 8;
+    int n = 4;
     Matrix a, b, c, d;
 
     // intialize matrix a
