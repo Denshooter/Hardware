@@ -1,20 +1,22 @@
+#pragma GCC optimize("O3")
+#pragma GCC option("arch=native", "tune=native", "no-zero-upper");
+#pragma GCC target("avx")
+
+#define _GNU_SOURCE
+
+#include <x86intrin.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/time.h>
 #include <string.h>
 
 #define run_benchmark 0
-
-#define VECTOR(TYPE,NELEM,ALIGN) \
-    TYPE __attribute__ ((vector_size(sizeof(TYPE)*(NELEM)),aligned(ALIGN)))
 
 // number bytes in the simd vector
 #define SIMD_BYTES 32
 // number of floats in a simd vector
 #define SIMD_FLOATS (SIMD_BYTES / sizeof(float))
-
-// aligned to simd vector size
-typedef VECTOR(float,SIMD_FLOATS,SIMD_BYTES) vfa;
 
 // data type for matrix
 typedef struct {
@@ -62,19 +64,18 @@ void matrixPrint(Matrix *a)
 
 void matrixAddSIMD(Matrix *a, Matrix *b, Matrix *c)
 {
-    // Make sure matrix dimensions match.
     if ((a->rows != b->rows) || (a->cols != b->cols)) {
-        fprintf(stderr, "matrixAddSIMD: input size mismatch\n");
+        fprintf(stderr, "matrixAdd: input size mismatch\n");
         exit(-1);
     }
 
 
 #if 0
-    // THIS IS JUST EXAMPLE CODE FOR MATRIX ADDITION
     // number of elements
     int sz = a->rows * a->cols;
 
-    // sequential version with alignment considerations
+    // sequential version with alignment considerations (no
+    // seq. preamble, but postamble)
     float *a1, *b1, *c1;
     a1 = __builtin_assume_aligned(a->data, SIMD_BYTES);
     b1 = __builtin_assume_aligned(b->data, SIMD_BYTES);
@@ -84,25 +85,17 @@ void matrixAddSIMD(Matrix *a, Matrix *b, Matrix *c)
     }
 #endif 
 
-    int sz = a->rows * a->cols;
-    vfa *a1 = (vfa *)__builtin_assume_aligned(a->data, SIMD_BYTES);
-    vfa *b1 = (vfa *)__builtin_assume_aligned(b->data, SIMD_BYTES);
-    vfa *c1 = (vfa *)__builtin_assume_aligned(c->data, SIMD_BYTES);  
-    
-    for (int i = 0; i < sz / SIMD_FLOATS; i++) {
-        c1[i] = a1[i] + b1[i];
-    }
+    // TODO: a) YOUR CODE HERE
+
 }
 
 void matrixMultSeq(Matrix *a, Matrix *b, Matrix *c)
 {
-    // Make sure matrix dimensions match.
     if (a->cols != b->rows || c->rows != a->rows || c->cols != b->cols) {
         fprintf(stderr, "matrixAdd: input size mismatch\n");
         exit(-1);
     }
 
-    // Naive baseline implementation of matrix multiplication.
     for (int i = 0; i < a->rows; i++) {
         for (int j = 0; j < b->cols; j++) {
             for (int k = 0; k < a->cols; k++) {
@@ -112,51 +105,16 @@ void matrixMultSeq(Matrix *a, Matrix *b, Matrix *c)
     }
 }
 
-void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c) {
-    // Check if matrix dimensions match.
+void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c)
+{
     if (a->cols != b->rows || c->rows != a->rows || c->cols != b->cols) {
         fprintf(stderr, "matrixAdd: input size mismatch\n");
         exit(-1);
     }
 
-    // Iterate over rows of matrix a.
-    for (int i = 0; i < a->rows; i++) {
-        // Iterate over columns of matrix b.
-        for (int j = 0; j < b->cols; j++) {
-            // Initialize sum variable as a vector of zeros.
-            vfa sum = {0, 0, 0, 0, 0, 0, 0, 0};
+    // TODO: b) YOUR CODE HERE
 
-            // Iterate over columns of matrix a (and rows of matrix b) with SIMD_FLOATS step.
-            for (int k = 0; k < a->cols; k += SIMD_FLOATS) {
-                // Iterate over elements of a_vector.
-                for (int l = 0; l < SIMD_FLOATS; l++) {
-                    // Ensure that we are within the valid range of matrix a.
-                    if (k + l < a->cols) {
-                        // Load a single value from matrix a.
-                        float a_val = a->data[i * a->cols + k + l];
-                        // Load a single value from matrix b.
-                        float b_val = b->data[(k + l) * b->cols + j];
-                        // Multiply the values and accumulate the result in the corresponding element of the sum vector.
-                        sum[l] += a_val * b_val;
-                    }
-                }
-            }
-
-            // Sum up the elements of the sum vector.
-            float result = 0;
-            for (int l = 0; l < SIMD_FLOATS; l++) {
-                result += sum[l];
-            }
-
-            // Store the result in the output matrix.
-            c->data[i * c->cols + j] = result;
-        }
-    }
 }
-
-
-
-
 
 double timespec_diff(struct timespec ts1, struct timespec ts2) {
     return (double)(ts2.tv_sec - ts1.tv_sec) + (double)((ts2.tv_nsec - ts1.tv_nsec)/1e9f);
@@ -165,34 +123,36 @@ double timespec_diff(struct timespec ts1, struct timespec ts2) {
 int main(int argc, char *argv[])
 {
     srand48(time(NULL));
-    int n = 8;
+
     Matrix a, b, c, d;
+
+    int m = 9;
 
     // intialize matrix a
     printf("Matrix a\n");
-    matrixAlloc(&a, n, n);
+    matrixAlloc(&a, m, m);
     matrixRandom(&a);
     matrixPrint(&a);
 
     // initialize matrix b
     printf("Matrix b\n");
-    matrixAlloc(&b, n, n);
+    matrixAlloc(&b, m, m);
     matrixRandom(&b);
     matrixPrint(&b);
 
     // c = a + b
     printf("Matrix c = a + b\n");
-    matrixAlloc(&c, n, n);
+    matrixAlloc(&c, m, m);
     matrixAddSIMD(&a, &b, &c);
     matrixPrint(&c);
 
-    // d = a * b (Sequential)
+    // d = a * b
     printf("Sequential; d = a * b\n");
-    matrixAlloc(&d, n, n);
+    matrixAlloc(&d, m, m);
     matrixMultSeq(&a, &b, &d);
     matrixPrint(&d);
 
-    // d = a * b (SIMD, result should be the same as before)
+    // d = a * b
     printf("SIMD; d = a * b\n");
     matrixClear(&d);
     matrixMultSIMD(&a, &b, &d);
@@ -200,12 +160,14 @@ int main(int argc, char *argv[])
 
 #if (run_benchmark == 1)
 
+    // benchmark
     FILE *benchmark = fopen("benchmark.csv", "w");
     Matrix e, f, g, h;
     int n = 64;
 
+    printf("Init Benchmark.\n");
+
     for (int n = 3; n <= 64; n++) {
-        printf("Benchmarking for n = %d\n", n);
         matrixAlloc(&e, n, n);
         matrixRandom(&e);
 
@@ -217,10 +179,14 @@ int main(int argc, char *argv[])
 
         matrixAlloc(&h, n, n);
         matrixClear(&h);
+        
+        printf("Matrices allocated.\n");
 
         struct timespec ts0, ts1;
 
         double seq, simd;
+
+        printf("Starting with benchmark n = %d\n", n);
 
         clock_gettime(CLOCK_REALTIME, &ts0);
         for (int i = 0; i < 10000; i++) {
@@ -229,12 +195,16 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_REALTIME, &ts1);
         seq = timespec_diff(ts0, ts1);
 
+        printf("Done sequential.\n");
+
         clock_gettime(CLOCK_REALTIME, &ts0);
         for (int i = 0; i < 10000; i++) {
             matrixMultSIMD(&e, &f, &h);
         }
         clock_gettime(CLOCK_REALTIME, &ts1);
         simd = timespec_diff(ts0, ts1);
+
+        printf("Done SIMD.\n");
 
         fprintf(benchmark, "%i, %f, %f\n", n, seq, simd);
 
