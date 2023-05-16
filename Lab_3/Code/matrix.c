@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <string.h>
 
-#define run_benchmark 0
+#define run_benchmark 1
 
 // number bytes in the simd vector
 #define SIMD_BYTES 32
@@ -85,8 +85,13 @@ void matrixAddSIMD(Matrix *a, Matrix *b, Matrix *c)
     }
 #endif 
 
-    // TODO: a) YOUR CODE HERE
-
+    //use SIMD intrinsics, to calculate the sum of two matrices A and B, and store the result in C
+for (int i = 0; i < a->rows * a->cols; i += SIMD_FLOATS) {
+    __m256 a1 = _mm256_loadu_ps(a->data + i);  // Load unaligned data
+    __m256 b1 = _mm256_loadu_ps(b->data + i);  // Load unaligned data
+    __m256 c1 = _mm256_add_ps(a1, b1);
+    _mm256_storeu_ps(c->data + i, c1);  // Store unaligned data
+}
 }
 
 void matrixMultSeq(Matrix *a, Matrix *b, Matrix *c)
@@ -112,8 +117,23 @@ void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c)
         exit(-1);
     }
 
-    // TODO: b) YOUR CODE HERE
+    int rowsA = a->rows;
+    int colsA = a->cols;
+    int colsB = b->cols;
 
+    for (int i = 0; i < rowsA; ++i) {
+        for (int j = 0; j < colsB; j += 4) {
+            __m128 sum = _mm_setzero_ps();
+
+            for (int k = 0; k < colsA; ++k) {
+                __m128 a1 = _mm_set1_ps(a->data[i * colsA + k]);
+                __m128 b1 = _mm_loadu_ps(&b->data[k * colsB + j]);
+                sum = _mm_add_ps(_mm_mul_ps(a1, b1), sum);
+            }
+
+            _mm_storeu_ps(&c->data[i * colsB + j], sum);
+        }
+    }
 }
 
 double timespec_diff(struct timespec ts1, struct timespec ts2) {
@@ -126,7 +146,7 @@ int main(int argc, char *argv[])
 
     Matrix a, b, c, d;
 
-    int m = 9;
+    int m = 4;
 
     // intialize matrix a
     printf("Matrix a\n");

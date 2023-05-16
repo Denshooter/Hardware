@@ -121,38 +121,8 @@ void matrixMultSIMD(Matrix *a, Matrix *b, Matrix *c) {
         exit(-1);
     }
 
-    // Iterate over rows of matrix a.
-    for (int i = 0; i < a->rows; i++) {
-        // Iterate over rows of matrix b.
-        for (int j = 0; j < b->rows; j++) {
-            // Initialize sum variable as a vector of zeros.
-            vfa sum = {0, 0, 0, 0, 0, 0, 0, 0};
-
-            // Iterate over columns of matrix a and rows of matrix b.
-            for (int k = 0; k < a->cols; k += SIMD_FLOATS) {
-                // Get the value for a before the loop.
-                vfa a_values;
-                memcpy(&a_values, &a->data[i * a->cols + k], sizeof(vfa));
-
-                // Iterate over SIMD_FLOATS elements in a_values and rows of matrix b.
-                for (int l = 0; l < SIMD_FLOATS && k + l < a->cols; l++) {
-                    float a_value = a_values[l];
-                    vfa b_vector;
-                    memcpy(&b_vector, &b->data[(k + l) * b->cols + j], sizeof(vfa));
-                    sum[l] += a_value * b_vector[l];
-                }
-            }
-
-            // Sum up the elements of the sum vector.
-            float result = 0;
-            for (int l = 0; l < SIMD_FLOATS; l++) {
-                result += sum[l];
-            }
-
-            // Store the result in the output matrix.
-            c->data[i * c->cols + j] = result;
-        }
-    }
+    // Take Matrix A and B, do matrix multiplication with SIMD and store result in C
+    
 }
 
 
