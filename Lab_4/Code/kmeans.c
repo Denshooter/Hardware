@@ -179,9 +179,90 @@ int kmeans_simd(float *pointsx, float *pointsy, unsigned int values,
         meansy[i] = tmpmeanx / values + drand48();
     }
 
-    // TODO: YOUR CODE HERE!
+    // Initialize SIMD vectors for temporary accumulator variables and sizes
+    __m256 tmpx[k];      // temporary accumulator for x coordinates for each cluster
+    __m256 tmpy[k];      // temporary accumulator for y coordinates for each cluster
+    __m256 sizes[k];     // number of data points in each cluster (i.e., the size of each cluster)
 
+    // Initialize SIMD vectors for meansx and meansy
+    __m256 simd_meansx = _mm256_load_ps(meansx);
+    __m256 simd_meansy = _mm256_load_ps(meansy);
+
+    // K-means Lloyd-Algorithm
+    for (int e = 0; e < EPISODES; e++) {
+        // Reset accumulator values
+        for (int i = 0; i < k; i++) {
+            tmpx[i] = _mm256_setzero_ps();
+            tmpy[i] = _mm256_setzero_ps();
+            sizes[i] = _mm256_setzero_ps();
+        }
+
+        // STEP 1: assign all points to their closest cluster center
+        // For all data points
+        for (int i = 0; i < values; i += SIMD_FLOATS) {
+            // Load SIMD vectors for point coordinates
+            __m256 simd_pointsx = _mm256_load_ps(&pointsx[i]);
+            __m256 simd_pointsy = _mm256_load_ps(&pointsy[i]);
+
+            // Initialize SIMD vectors for min_distance and cluster
+            __m256 min_distance = _mm256_set1_ps(INFINITY);
+            __m256i cluster = _mm256_set1_epi32(-1);
+
+            // Find the closest cluster center
+            for (int d = 0; d < k; d++) {
+                // Load SIMD vectors for cluster means
+                __m256 simd_meansx_d = _mm256_set1_ps(meansx[d]);
+                __m256 simd_meansy_d = _mm256_set1_ps(meansy[d]);
+
+                // Compute the squared distance between point and cluster center
+                __m256 simd_dx = _mm256_sub_ps(simd_pointsx, simd_meansx_d);
+                __m256 simd_dy = _mm256_sub_ps(simd_pointsy, simd_meansy_d);
+                __m256 simd_distance = _mm256_add_ps(_mm256_mul_ps(simd_dx, simd_dx), _mm256_mul_ps(simd_dy, simd_dy));
+
+                // Update min_distance and cluster if the distance is smaller
+                __m256 simd_mask = _mm256_cmp_ps(simd_distance, min_distance, _CMP_LT_OQ);
+                min_distance = _mm256_blendv_ps(min_distance, simd_distance, simd_mask);
+                cluster = _mm256_blendv_ps(cluster, _mm256_set1_ps(d), _mm256_castps_si256(simd_mask));
+            }
+
+            // Update the accumulator variables for the closest cluster
+            for (int d = 0; d < k; d++) {
+                // Find points that belong to the current cluster
+                __m256i simd_mask = _mm256_cmpeq_ps(cluster, _mm256_set1_ps(d));
+
+                // Update tmpx and tmpy with point coordinates
+                tmpx[d] = _mm256_add_ps(tmpx[d], _mm256_and_ps(simd_pointsx, _mm256_castsi256_ps(simd_mask)));
+                tmpy[d] = _mm256_add_ps(tmpy[d], _mm256_and_ps(simd_pointsy, _mm256_castsi256_ps(simd_mask)));
+
+                // Increase sizes if the point belongs to the current cluster
+                sizes[d] = _mm256_add_ps(sizes[d], _mm256_and_ps(_mm256_set1_ps(1), _mm256_castsi256_ps(simd_mask)));
+            }
+        }
+
+        // STEP 2: Update means by computing the centroids of the clusters
+        for (int d = 0; d < k; d++) {
+            // Calculate new means by dividing the temporary accumulator variables by sizes
+            __m256 simd_sizes = _mm256_div_ps(_mm256_set1_ps(values), sizes[d]);
+            tmpx[d] = _mm256_div_ps(tmpx[d], sizes[d]);
+            tmpy[d] = _mm256_div_ps(tmpy[d], sizes[d]);
+
+            // Update meansx and meansy
+            simd_meansx = _mm256_blendv_ps(simd_meansx, tmpx[d], _mm256_cmp_ps(sizes[d], _mm256_setzero_ps(), _CMP_NEQ_OQ));
+            simd_meansy = _mm256_blendv_ps(simd_meansy, tmpy[d], _mm256_cmp_ps(sizes[d], _mm256_setzero_ps(), _CMP_NEQ_OQ));
+
+            // Store the updated means
+            _mm256_store_ps(&meansx[d], tmpx[d]);
+            _mm256_store_ps(&meansy[d], tmpy[d]);
+        }
+    }
+
+    // Store the final means
+    _mm256_store_ps(meansx, simd_meansx);
+    _mm256_store_ps(meansy, simd_meansy);
+
+    return 0;
 }
+
 
 /**
  * @brief   Computes the difference between to timestamps.
